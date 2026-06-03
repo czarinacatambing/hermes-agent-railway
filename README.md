@@ -31,8 +31,22 @@ This template goes beyond a basic Hermes deploy:
 | `DASHBOARD_USER` | Login username (default: `admin`) |
 | `DASHBOARD_PASSWORD` | Login password (**required** — deploy will fail without it) |
 | `AUTO_UPDATE` | Pull latest Hermes on every restart (default: `true`, set to `false` to pin version) |
+| `API_SERVER_PORT` | Internal Hermes API server port for `/v1/*` proxying (default: `8642`) |
+| `API_SERVER_UPSTREAM` | Optional full internal API upstream override (default: `http://127.0.0.1:$API_SERVER_PORT`) |
+| `API_PROXY_PREFIXES` | Comma-separated public API path prefixes proxied without dashboard login (default: `/v1`) |
 
 All other configuration is done through the dashboard after deploy.
+
+To expose the Hermes API through the same Railway URL as the dashboard, enable the API server on an internal port and let this proxy forward `/v1/*`:
+
+```sh
+API_SERVER_ENABLED=true
+API_SERVER_HOST=127.0.0.1
+API_SERVER_PORT=8642
+API_SERVER_KEY=<your-api-server-key>
+```
+
+Requests to `/v1/*` skip dashboard cookie login, but Hermes still enforces bearer auth with `API_SERVER_KEY`.
 
 ## Persistent Storage
 
@@ -49,6 +63,7 @@ This persists sessions, memories, API keys, config, logs, and cron jobs.
 ```
 Internet -> Railway -> Auth Proxy (cookie login) -> Hermes Dashboard (port 9119)
                            |
+                           +-> /v1/* -> Hermes API server (default port 8642, bearer auth handled by Hermes)
                            +-> Messaging Gateway (Telegram/Discord/Slack)
                            +-> /api/health (unauthenticated, for Railway health checks)
                            +-> /api/gateway/restart (authenticated, restart bot)

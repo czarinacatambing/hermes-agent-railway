@@ -14,6 +14,13 @@ from aiohttp import web, ClientSession, WSMsgType
 
 HERMES_HOME = "/root/.hermes"
 UPSTREAM = "http://127.0.0.1:9119"
+API_SERVER_PORT = os.environ.get("API_SERVER_PORT", "8642")
+API_SERVER_UPSTREAM = os.environ.get("API_SERVER_UPSTREAM", f"http://127.0.0.1:{API_SERVER_PORT}")
+API_PROXY_PREFIXES = tuple(
+    prefix.strip().rstrip("/")
+    for prefix in os.environ.get("API_PROXY_PREFIXES", "/v1").split(",")
+    if prefix.strip()
+)
 USERNAME = os.environ.get("DASHBOARD_USER", "admin")
 PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 SECRET = secrets.token_bytes(32)
@@ -40,6 +47,10 @@ def check_token(token):
         return hmac.compare_digest(sig, expected)
     except Exception:
         return False
+
+
+def is_api_server_path(path):
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in API_PROXY_PREFIXES)
 
 
 LOGIN_HTML = """<!DOCTYPE html>
@@ -276,7 +287,7 @@ async def logout(request):
 
 @web.middleware
 async def auth_middleware(request, handler):
-    if request.path in ("/login", "/logout", "/api/health"):
+    if request.path in ("/login", "/logout", "/api/health") or is_api_server_path(request.path):
         return await handler(request)
 
     token = request.cookies.get(COOKIE)
@@ -401,7 +412,8 @@ async def proxy(request):
         return await proxy_ws(request)
 
     async with ClientSession() as session:
-        url = f"{UPSTREAM}{request.path_qs}"
+        upstream = API_SERVER_UPSTREAM if is_api_server_path(request.path) else UPSTREAM
+        url = f"{upstream}{request.path_qs}"
         headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "transfer-encoding")}
 
         body = await request.read()
